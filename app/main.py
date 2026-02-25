@@ -62,7 +62,21 @@ def validate_country_currency(country: str, currency: str):
         )
 
 
-@app.post("/api/v1/recommendations", response_model=RecommendationResponse, tags=["Routing"])
+@app.post(
+    "/api/v1/recommendations",
+    response_model=RecommendationResponse,
+    tags=["Routing"],
+    summary="Get ranked payment methods for a transaction",
+    description=(
+        "Returns payment methods available for the given country, ranked by predicted success probability "
+        "using Bayesian scoring on historical transaction outcomes. "
+        "Each country only accepts its native currency or USD."
+    ),
+    responses={
+        404: {"description": "Country not supported"},
+        422: {"description": "Currency not accepted for the given country"},
+    },
+)
 def recommend_payment_methods(request: RecommendationRequest, conn=Depends(get_db_conn)):
     country = request.country.upper()
     currency = request.currency.upper()
@@ -81,7 +95,21 @@ def recommend_payment_methods(request: RecommendationRequest, conn=Depends(get_d
     )
 
 
-@app.post("/api/v1/transactions", response_model=TransactionResponse, tags=["Transactions"])
+@app.post(
+    "/api/v1/transactions",
+    response_model=TransactionResponse,
+    tags=["Transactions"],
+    summary="Record a payment transaction outcome",
+    description=(
+        "Records the outcome of a payment attempt. Each recorded transaction feeds the Bayesian "
+        "scoring model, so future recommendations for the same country and method will reflect "
+        "the accumulated real-world success rates."
+    ),
+    responses={
+        404: {"description": "Country not supported"},
+        422: {"description": "Currency not accepted for the given country"},
+    },
+)
 def record_transaction(request: TransactionRequest, conn=Depends(get_db_conn)):
     country = request.country.upper()
     currency = request.currency.upper()
