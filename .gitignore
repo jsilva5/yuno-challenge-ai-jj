@@ -1,0 +1,15 @@
+# Generated database — recreated at runtime via seed_data.py
+routeflow.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
