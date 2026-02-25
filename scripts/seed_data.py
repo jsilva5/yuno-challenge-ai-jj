@@ -1,11 +1,11 @@
 """
 Seed the RouteFlow database with 600 synthetic transactions across 5 countries.
 Reflects realistic success rates:
-  BR (150): PIX 86%, credit_card 14%, bank_transfer 42%
-  MX (150): OXXO 72%, credit_card 18%, bank_transfer 37%
+  BR (150): PIX 86%, credit_card 14%, Boleto 65%
+  MX (150): OXXO 72%, credit_card 18%, SPEI 68%
   PH (100): GCash 80%, GrabPay 74%, credit_card 9%
-  CO (100): PSE 69%, credit_card 19%, bank_transfer 34%
-  KE (100): M-Pesa 83%, credit_card 14%, bank_transfer 31%
+  CO (100): PSE 69%, credit_card 19%, Neki 62%
+  JP (100): PayPay 82%, 7-Eleven 73%, credit_card 42%
 """
 
 import sys
@@ -22,25 +22,25 @@ from app.database import init_db, get_db
 # Seed config: (country, currency, method, count, success_rate)
 SEED_CONFIG = [
     # Brazil
-    ("BR", "BRL", "pix",           90, 0.86),
-    ("BR", "BRL", "credit_card",   35, 0.14),
-    ("BR", "BRL", "bank_transfer", 25, 0.42),
+    ("BR", "BRL", "pix",         90, 0.86),
+    ("BR", "BRL", "credit_card", 35, 0.14),
+    ("BR", "BRL", "boleto",      25, 0.65),
     # Mexico
-    ("MX", "MXN", "oxxo",          90, 0.72),
-    ("MX", "MXN", "credit_card",   35, 0.18),
-    ("MX", "MXN", "bank_transfer", 25, 0.37),
+    ("MX", "MXN", "oxxo",        90, 0.72),
+    ("MX", "MXN", "credit_card", 35, 0.18),
+    ("MX", "MXN", "spei",        25, 0.68),
     # Philippines
-    ("PH", "PHP", "gcash",         45, 0.80),
-    ("PH", "PHP", "grabpay",       35, 0.74),
-    ("PH", "PHP", "credit_card",   20, 0.09),
+    ("PH", "PHP", "gcash",        45, 0.80),
+    ("PH", "PHP", "grabpay",      35, 0.74),
+    ("PH", "PHP", "credit_card",  20, 0.09),
     # Colombia
-    ("CO", "COP", "pse",           50, 0.69),
-    ("CO", "COP", "credit_card",   30, 0.19),
-    ("CO", "COP", "bank_transfer", 20, 0.34),
-    # Kenya
-    ("KE", "KES", "mpesa",         55, 0.83),
-    ("KE", "KES", "credit_card",   25, 0.14),
-    ("KE", "KES", "bank_transfer", 20, 0.31),
+    ("CO", "COP", "pse",          50, 0.69),
+    ("CO", "COP", "credit_card",  30, 0.19),
+    ("CO", "COP", "neki",         20, 0.62),
+    # Japan
+    ("JP", "JPY", "paypay",       55, 0.82),
+    ("JP", "JPY", "seven_eleven", 25, 0.73),
+    ("JP", "JPY", "credit_card",  20, 0.42),
 ]
 
 # Typical amount ranges per currency (min, max)
@@ -49,7 +49,7 @@ AMOUNT_RANGES = {
     "MXN": (100, 15000),
     "PHP": (200, 15000),
     "COP": (10000, 2000000),
-    "KES": (200, 50000),
+    "JPY": (500, 100000),
 }
 
 
@@ -71,7 +71,7 @@ def random_timestamp(days_back: int = 90, method: str = "") -> datetime:
     offset_seconds = random.randint(0, days_back * 86400)
     ts = base + timedelta(seconds=offset_seconds)
 
-    if method in ("bank_transfer", "pse"):
+    if method in ("spei", "pse", "neki"):
         # Bias toward business hours
         if random.random() < 0.70:
             ts = ts.replace(hour=random.randint(9, 16), minute=random.randint(0, 59))
