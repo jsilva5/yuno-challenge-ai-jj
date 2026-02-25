@@ -99,6 +99,27 @@ Seeds 600 transactions across 5 countries with realistic success patterns.
 python scripts/demo.py
 ```
 
+### 5. Run the test suite
+
+Install test dependencies and run all 102 tests:
+
+```bash
+pip install pytest httpx
+python -m pytest tests/ -v
+```
+
+Tests use an in-memory SQLite database — they are fully isolated and do not touch `routeflow.db`. No server needs to be running.
+
+To run a specific module:
+
+```bash
+python -m pytest tests/test_recommendations.py -v   # routing logic
+python -m pytest tests/test_transactions.py -v      # transaction recording
+python -m pytest tests/test_analytics.py -v         # analytics filters
+python -m pytest tests/test_learning.py -v          # Bayesian learning behaviour
+python -m pytest tests/test_health.py -v            # health endpoint
+```
+
 ---
 
 ## API Reference
@@ -131,12 +152,31 @@ curl -X POST http://localhost:8000/api/v1/recommendations \
 
 ### `POST /api/v1/transactions`
 
-Record a transaction outcome (feeds the learning loop).
+Record a transaction outcome to feed the learning loop. **This is the primary way RouteFlow improves over time.**
+
+Every recorded outcome immediately affects the next recommendation — there is no batch job or retraining step. The Bayesian formula re-evaluates on every request using the live transaction count in the database.
+
+**Both successes and failures matter.** A `success: false` outcome is just as valuable as a success: it teaches the router which methods underperform for a given country, pulling their score down on subsequent requests.
+
+**How many transactions before the prior is overridden?** With `α=10` (the Bayesian weight given to the prior), after roughly 10 real transactions the empirical rate starts to have meaningful influence. After ~50 transactions, real data dominates and the prior becomes a minor factor.
+
+**Backfilling historical data** is supported via the optional `timestamp` field. Pass an ISO 8601 datetime to record past outcomes — useful for importing data from an existing system on first deploy.
 
 ```bash
+# Record a successful transaction
 curl -X POST http://localhost:8000/api/v1/transactions \
   -H "Content-Type: application/json" \
   -d '{"country": "MX", "currency": "MXN", "amount": 500.0, "payment_method": "oxxo", "success": true}'
+
+# Record a failed transaction (equally important for learning)
+curl -X POST http://localhost:8000/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"country": "BR", "currency": "BRL", "amount": 200.0, "payment_method": "credit_card", "success": false}'
+
+# Backfill a historical outcome using an explicit timestamp
+curl -X POST http://localhost:8000/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"country": "BR", "currency": "BRL", "amount": 150.0, "payment_method": "pix", "success": true, "timestamp": "2024-06-15T10:30:00Z"}'
 ```
 
 **Response:**
