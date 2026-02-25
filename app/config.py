@@ -46,6 +46,15 @@ AMOUNT_RANGES = {
     "seven_eleven": (1, 2000),
 }
 
+# Accepted currencies per country (native currency + USD always allowed)
+COUNTRY_CURRENCIES = {
+    "BR": {"BRL", "USD"},
+    "MX": {"MXN", "USD"},
+    "PH": {"PHP", "USD"},
+    "CO": {"COP", "USD"},
+    "JP": {"JPY", "USD"},
+}
+
 # Rough USD conversion rates for amount normalization
 CURRENCY_TO_USD = {
     "BRL": 0.20,

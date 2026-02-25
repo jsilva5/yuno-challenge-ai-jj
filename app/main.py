@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.router import get_recommendations
 from app.analytics import get_analytics_metrics
+from app.config import COUNTRY_CURRENCIES
 
 app = FastAPI(
     title="RouteFlow Payment Method Router",
@@ -50,10 +51,23 @@ def health_check(conn=Depends(get_db_conn)):
     return HealthResponse(status="ok", version="1.0.0", db_status=db_status)
 
 
+def validate_country_currency(country: str, currency: str):
+    accepted = COUNTRY_CURRENCIES.get(country)
+    if accepted is None:
+        raise HTTPException(status_code=404, detail=f"No payment methods configured for country '{country}'")
+    if currency not in accepted:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Currency '{currency}' is not accepted for country '{country}'. Accepted: {sorted(accepted)}"
+        )
+
+
 @app.post("/api/v1/recommendations", response_model=RecommendationResponse, tags=["Routing"])
 def recommend_payment_methods(request: RecommendationRequest, conn=Depends(get_db_conn)):
     country = request.country.upper()
-    recommendations = get_recommendations(country, request.currency, request.amount, conn)
+    currency = request.currency.upper()
+    validate_country_currency(country, currency)
+    recommendations = get_recommendations(country, currency, request.amount, conn)
     if not recommendations:
         raise HTTPException(
             status_code=404,
@@ -61,7 +75,7 @@ def recommend_payment_methods(request: RecommendationRequest, conn=Depends(get_d
         )
     return RecommendationResponse(
         country=country,
-        currency=request.currency,
+        currency=currency,
         amount=request.amount,
         recommendations=recommendations,
     )
@@ -70,6 +84,8 @@ def recommend_payment_methods(request: RecommendationRequest, conn=Depends(get_d
 @app.post("/api/v1/transactions", response_model=TransactionResponse, tags=["Transactions"])
 def record_transaction(request: TransactionRequest, conn=Depends(get_db_conn)):
     country = request.country.upper()
+    currency = request.currency.upper()
+    validate_country_currency(country, currency)
     transaction_id = str(uuid.uuid4())
     timestamp = request.timestamp or datetime.now(timezone.utc)
 
@@ -82,7 +98,7 @@ def record_transaction(request: TransactionRequest, conn=Depends(get_db_conn)):
             (
                 transaction_id,
                 country,
-                request.currency,
+                currency,
                 request.amount,
                 request.payment_method,
                 1 if request.success else 0,
