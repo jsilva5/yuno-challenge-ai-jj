@@ -85,6 +85,9 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations \
 
 ## Step 4 — Record a Transaction Outcome
 
+Calling this endpoint is how RouteFlow learns. Each recorded outcome is persisted immediately and influences the very next recommendation — no restart or retraining required.
+
+**Record a successful transaction:**
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/transactions \
   -H "Content-Type: application/json" \
@@ -96,28 +99,43 @@ Expected:
 {"id": "<uuid>", "status": "recorded"}
 ```
 
-Record a failed transaction:
+**Record a failed transaction** — failures are equally important. They pull a method's score down, teaching the router what doesn't work:
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/transactions \
   -H "Content-Type: application/json" \
   -d '{"country": "BR", "currency": "BRL", "amount": 200.0, "payment_method": "credit_card", "success": false}'
 ```
 
+**Backfill a historical outcome** using the optional `timestamp` field — useful when importing data from an existing system:
+```bash
+curl -s -X POST http://localhost:8000/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"country": "BR", "currency": "BRL", "amount": 150.0, "payment_method": "pix", "success": true, "timestamp": "2024-06-15T10:30:00Z"}'
+```
+
 ---
 
 ## Step 5 — Demonstrate Learning Behavior
 
-This shows the Bayesian router updating scores as new outcomes are recorded.
+This shows the Bayesian router updating scores in real time as new outcomes are recorded.
 
-**Check Brazil credit_card score before:**
+The router blends a **prior** (domain knowledge) with **empirical data** using the formula:
+
+```
+bayesian_rate = (successes + α × prior) / (attempts + α)
+```
+
+With `α=10`, roughly 10 transactions begin shifting the score away from the prior. After ~50 transactions, real data dominates. The update is immediate — each new transaction changes the score on the very next recommendation call.
+
+**1. Check Brazil `credit_card` score before feeding data:**
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/recommendations \
   -H "Content-Type: application/json" \
   -d '{"country": "BR", "currency": "BRL", "amount": 100.0}'
 ```
-Note the `score` for `credit_card`.
+Note the `score` and `data_points` for `credit_card`. With no data, the score equals the prior (0.15).
 
-**Feed 10 successful credit_card outcomes for Brazil:**
+**2. Feed 10 successful `credit_card` outcomes for Brazil:**
 ```bash
 for i in $(seq 1 10); do
   curl -s -X POST http://localhost:8000/api/v1/transactions \
@@ -128,12 +146,27 @@ done
 echo "Done feeding 10 successes"
 ```
 
-**Check Brazil credit_card score after — it should be higher:**
+**3. Check the score again — it should be higher:**
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/recommendations \
   -H "Content-Type: application/json" \
   -d '{"country": "BR", "currency": "BRL", "amount": 100.0}'
 ```
+
+With 10 successes out of 10 attempts, the new Bayesian rate is: `(10 + 10×0.15) / (10 + 10) = 0.575` — up from 0.15. The `data_points` field will now show `10`, confirming the empirical data was incorporated.
+
+**4. Observe the inverse — feed failures to push a score down:**
+```bash
+for i in $(seq 1 10); do
+  curl -s -X POST http://localhost:8000/api/v1/transactions \
+    -H "Content-Type: application/json" \
+    -d '{"country": "BR", "currency": "BRL", "amount": 100.0, "payment_method": "pix", "success": false}' \
+    > /dev/null
+done
+echo "Done feeding 10 failures"
+```
+
+Re-query recommendations — `pix`'s score will drop from its prior of 0.85 toward the observed failure rate.
 
 ---
 
